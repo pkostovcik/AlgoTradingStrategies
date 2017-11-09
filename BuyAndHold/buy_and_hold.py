@@ -1,9 +1,8 @@
 # strategy 
-import numpy as np
-import pandas as pd
-import fix_yahoo_finance as yf
-import seaborn as sns
-import matplotlib.pyplot as plt
+import numpy as np  # -v 1.13.3
+import pandas as pd # -v 0.21.0
+import pandas_datareader.data as web # -v 0.5.0
+import matplotlib.pyplot as plt # -v 2.1.0
 import datetime as dt
 
 class BuyAndHoldStrategy(object):
@@ -111,10 +110,8 @@ class BuyAndHoldStrategy(object):
         try:
             start = self.strategy_income.index[0]
             end = self.strategy_income.index[-1] + dt.timedelta(1)
-            start = str(str(start.year)+"-"+str(start.month)+"-"+str(start.day))
-            end = str(str(end.year)+"-"+str(end.month)+"-"+str(end.day))
             if self.spx_adj_close is None:
-                spx = yf.download("^GSPC", start = start, end = end)
+                spx = web.DataReader("^GSPC", 'yahoo', start, end)
                 self.spx_adj_close = spx["Adj Close"]
             dates = pd.to_datetime(self.buy_dates[1:])
             inv = self.investment
@@ -137,20 +134,29 @@ class BuyAndHoldStrategy(object):
     
     def plot(self, figure = None, save = None):
         # plot results, max drawdown and yearly returns
-        plt.rcParams["font.family"] = "Cambria"
+        #plt.rcParams["font.family"] = "Cambria"
+        
         self.data.index = pd.to_datetime(self.data.index)
         if type(figure) == type(None):
             figure = plt.figure(figsize=(8,6))
         plt.subplot2grid((5,1),(0,0),rowspan=3)
-        plt.plot(self.strategy_income.index, self.strategy_income.values, label = "Buy&Hold")
-        plt.vlines(self.buy_dates, ymin = np.repeat(0,len(self.buy_dates)), label = "deposit",
-                   ymax = 0.9*np.repeat(self.strategy_income.loc[self.buy_dates[-1]],len(self.buy_dates)), 
+        plt.plot(self.strategy_income.index.to_pydatetime(), 
+                 self.strategy_income.values, 
+                 label = "Buy&Hold")
+        plt.vlines(pd.to_datetime(self.buy_dates).to_pydatetime(), 
+                   ymin = np.repeat(0,len(self.buy_dates)), 
+                   label = "deposit",
+                   ymax = 0.9*np.repeat(self.strategy_income.loc[self.buy_dates[-1]],
+                                        len(self.buy_dates)), 
                    linestyle = "--", lw=1)
         if self.spx_use:
-            plt.plot(self.spx_buyandhold_income, lw=1.3, color = "g", label = "SPX")
+            plt.plot(self.spx_buyandhold_income.index.to_pydatetime(), 
+                     self.spx_buyandhold_income.values.reshape(-1), 
+                     lw=1.3, color = "g", label = "SPX")
         plt.legend()        
-        plt.xticks(pd.date_range(start = dt.datetime(int(self.data.index[0].year),1,1), 
-                                 end=self.strategy_income.index[-1], freq="AS"))
+        plt.xticks(pd.date_range(start=pd.Timestamp(int(self.data.index[0].year),1,1), 
+                                 end=self.strategy_income.index[-1], 
+                                 freq="AS").to_pydatetime())
         plt.tick_params(axis="x", labelbottom = "off")
         plt.xlabel("")
         plt.xlim(self.strategy_income.index[0], self.strategy_income.index[-1])
@@ -159,10 +165,12 @@ class BuyAndHoldStrategy(object):
                      %(self.investment, self.window, self.quantile), fontsize=12)
                 
         plt.subplot(5,1,4)
-        plt.fill_between(self.maxdrawdown.index, y1= np.zeros(len(self.maxdrawdown)), 
+        plt.fill_between(self.maxdrawdown.index.to_pydatetime(), 
+                         y1= np.zeros(len(self.maxdrawdown)), 
                          y2 = self.maxdrawdown.values.T[0]*100, color="r", alpha=0.5)
         plt.xticks(pd.date_range(start = dt.datetime(int(self.data.index[0].year),1,1), 
-                                 end=self.strategy_income.index[-1], freq="AS"))
+                                 end=self.strategy_income.index[-1], 
+                                 freq="AS").to_pydatetime())
         plt.tick_params(axis="x", labelbottom = "off")
         plt.xlabel("")
         plt.xlim(self.strategy_income.index[0], self.strategy_income.index[-1])
@@ -173,13 +181,14 @@ class BuyAndHoldStrategy(object):
         plt.subplot(5,1,5)
         a = self.annual_returns.copy()
         a.index = pd.to_datetime((self.annual_returns.index - dt.timedelta(6*365/12)))
-        plt.bar(a.index,100*a.values, width=250, alpha=0.5)
+        plt.bar(a.index.to_pydatetime(), 100*a.values.reshape(-1), width=250, alpha=0.5)
         if self.spx_use:
             b = self.spx_returns.copy()
             b.index = pd.to_datetime((self.annual_returns.index - dt.timedelta(6*365/12)))
-            plt.bar(b.index,100*b.values, width=250, alpha=0.5)
+            plt.bar(b.index.to_pydatetime(),100*b.values.reshape(-1), width=250, alpha=0.5)
         plt.xticks(pd.date_range(start = dt.datetime(int(self.data.index[0].year),1,1), 
-                                 end = self.strategy_income.index[-1], freq="AS"), rotation = 45)
+                                 end = self.strategy_income.index[-1], freq="AS").to_pydatetime(),
+            rotation = 45)
         plt.xlim(self.strategy_income.index[0], self.strategy_income.index[-1])
         plt.ylabel("%")
         plt.yticks(np.arange(((a.values*10).round()*10).min(), ((a.values*10).round()*10).max(),40))
@@ -240,3 +249,7 @@ class BuyAndHoldStrategy(object):
         maxdrawdown = pd.DataFrame(maxdrawdown, index=self.strategy_income.index)    
         return maxdrawdown
 
+if __name__ =='__main__':
+    data = pd.read_csv('buy_and_hold_prices.csv', index_col='Date')
+    strategy = BuyAndHoldStrategy(data)
+    strategy.plot()
